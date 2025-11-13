@@ -30,7 +30,12 @@ public class PortfolioSnapshotScheduler {
             
             for (Portfolio portfolio : portfolios) {
                 try {
-                    analyticsService.createPortfolioSnapshot(portfolio.getId());
+                    // Get portfolio summary and create snapshot
+                    var summary = analyticsService.getPortfolioSummary(
+                        portfolio.getId(), 
+                        portfolio.getUser().getId()
+                    );
+                    analyticsService.createSnapshot(portfolio, summary);
                     successCount++;
                 } catch (Exception e) {
                     log.error("Error creating snapshot for portfolio {}: {}", 
