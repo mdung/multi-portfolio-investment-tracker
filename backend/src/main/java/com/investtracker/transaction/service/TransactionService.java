@@ -6,13 +6,18 @@ import com.investtracker.portfolio.entity.Portfolio;
 import com.investtracker.portfolio.service.PortfolioService;
 import com.investtracker.transaction.dto.TransactionRequest;
 import com.investtracker.transaction.dto.TransactionResponse;
+import com.investtracker.transaction.dto.UpdateTransactionRequest;
 import com.investtracker.transaction.entity.Transaction;
 import com.investtracker.transaction.repository.TransactionRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -93,6 +98,134 @@ public class TransactionService {
     
     public List<Transaction> getTransactionsByPortfolioAndAsset(UUID portfolioId, UUID assetId) {
         return transactionRepository.findByPortfolioIdAndAssetId(portfolioId, assetId);
+    }
+    
+    public TransactionResponse getTransactionById(UUID transactionId, UUID userId) {
+        Transaction transaction = transactionRepository.findByIdAndUserId(transactionId, userId)
+            .orElseThrow(() -> new IllegalArgumentException("Transaction not found or access denied"));
+        return toResponse(transaction);
+    }
+    
+    @Transactional
+    public TransactionResponse updateTransaction(UUID transactionId, UUID userId, UpdateTransactionRequest request) {
+        Transaction transaction = transactionRepository.findByIdAndUserId(transactionId, userId)
+            .orElseThrow(() -> new IllegalArgumentException("Transaction not found or access denied"));
+        
+        // Validate portfolio ownership (should already be validated, but double-check)
+        if (!transaction.getPortfolio().getUser().getId().equals(userId)) {
+            throw new IllegalArgumentException("Access denied");
+        }
+        
+        // Get asset
+        Asset asset = assetService.findById(request.getAssetId())
+            .orElseThrow(() -> new IllegalArgumentException("Asset not found"));
+        
+        // Handle transfer portfolio
+        Portfolio transferPortfolio = null;
+        if (request.getTransferPortfolioId() != null) {
+            transferPortfolio = portfolioService.findById(request.getTransferPortfolioId())
+                .orElseThrow(() -> new IllegalArgumentException("Transfer portfolio not found"));
+            
+            if (!transferPortfolio.getUser().getId().equals(userId)) {
+                throw new IllegalArgumentException("Transfer portfolio access denied");
+            }
+        }
+        
+        // Update transaction
+        transaction.setAsset(asset);
+        transaction.setTransactionType(request.getTransactionType());
+        transaction.setQuantity(request.getQuantity());
+        transaction.setPrice(request.getPrice());
+        transaction.setFee(request.getFee() != null ? request.getFee() : java.math.BigDecimal.ZERO);
+        transaction.setTransactionDate(request.getTransactionDate());
+        transaction.setNotes(request.getNotes());
+        transaction.setTransferPortfolio(transferPortfolio);
+        
+        Transaction saved = transactionRepository.save(transaction);
+        
+        // If this is a transfer, update the corresponding transaction
+        if (request.getTransactionType() == Transaction.TransactionType.TRANSFER_OUT && transferPortfolio != null) {
+            // Find and update the corresponding TRANSFER_IN transaction
+            List<Transaction> transferInTransactions = transactionRepository.findByPortfolioIdAndAssetId(
+                transferPortfolio.getId(), asset.getId()
+            );
+            transferInTransactions.stream()
+                .filter(t -> t.getTransactionType() == Transaction.TransactionType.TRANSFER_IN)
+                .filter(t -> t.getTransferPortfolio() != null && t.getTransferPortfolio().getId().equals(transaction.getPortfolio().getId()))
+                .findFirst()
+                .ifPresent(transferIn -> {
+                    transferIn.setQuantity(request.getQuantity());
+                    transferIn.setPrice(request.getPrice());
+                    transferIn.setTransactionDate(request.getTransactionDate());
+                    transferIn.setNotes("Transfer from " + transaction.getPortfolio().getName());
+                    transactionRepository.save(transferIn);
+                });
+        }
+        
+        return toResponse(saved);
+    }
+    
+    @Transactional
+    public void deleteTransaction(UUID transactionId, UUID userId) {
+        Transaction transaction = transactionRepository.findByIdAndUserId(transactionId, userId)
+            .orElseThrow(() -> new IllegalArgumentException("Transaction not found or access denied"));
+        
+        // If this is a transfer, also delete the corresponding transaction
+        if (transaction.getTransactionType() == Transaction.TransactionType.TRANSFER_OUT && 
+            transaction.getTransferPortfolio() != null) {
+            List<Transaction> transferInTransactions = transactionRepository.findByPortfolioIdAndAssetId(
+                transaction.getTransferPortfolio().getId(), transaction.getAsset().getId()
+            );
+            transferInTransactions.stream()
+                .filter(t -> t.getTransactionType() == Transaction.TransactionType.TRANSFER_IN)
+                .filter(t -> t.getTransferPortfolio() != null && t.getTransferPortfolio().getId().equals(transaction.getPortfolio().getId()))
+                .findFirst()
+                .ifPresent(transactionRepository::delete);
+        } else if (transaction.getTransactionType() == Transaction.TransactionType.TRANSFER_IN &&
+                   transaction.getTransferPortfolio() != null) {
+            // If deleting TRANSFER_IN, also delete the corresponding TRANSFER_OUT
+            List<Transaction> transferOutTransactions = transactionRepository.findByPortfolioIdAndAssetId(
+                transaction.getTransferPortfolio().getId(), transaction.getAsset().getId()
+            );
+            transferOutTransactions.stream()
+                .filter(t -> t.getTransactionType() == Transaction.TransactionType.TRANSFER_OUT)
+                .filter(t -> t.getTransferPortfolio() != null && t.getTransferPortfolio().getId().equals(transaction.getPortfolio().getId()))
+                .findFirst()
+                .ifPresent(transactionRepository::delete);
+        }
+        
+        transactionRepository.delete(transaction);
+    }
+    
+    public Page<TransactionResponse> getUserTransactions(
+        UUID userId,
+        UUID portfolioId,
+        UUID assetId,
+        Transaction.TransactionType transactionType,
+        LocalDateTime startDate,
+        LocalDateTime endDate,
+        Pageable pageable
+    ) {
+        Page<Transaction> transactions = transactionRepository.findUserTransactionsWithFilters(
+            userId, portfolioId, assetId, transactionType, startDate, endDate, pageable
+        );
+        return transactions.map(this::toResponse);
+    }
+    
+    public List<TransactionResponse> getUserTransactionsForExport(
+        UUID userId,
+        UUID portfolioId,
+        UUID assetId,
+        Transaction.TransactionType transactionType,
+        LocalDateTime startDate,
+        LocalDateTime endDate
+    ) {
+        List<Transaction> transactions = transactionRepository.findUserTransactionsWithFiltersList(
+            userId, portfolioId, assetId, transactionType, startDate, endDate
+        );
+        return transactions.stream()
+            .map(this::toResponse)
+            .collect(Collectors.toList());
     }
     
     private TransactionResponse toResponse(Transaction transaction) {
