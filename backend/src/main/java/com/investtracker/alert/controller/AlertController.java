@@ -74,6 +74,61 @@ public class AlertController {
             .orElse(ResponseEntity.notFound().build());
     }
     
+    @GetMapping("/{id}")
+    public ResponseEntity<PriceAlertResponse> getAlert(
+        @PathVariable UUID id,
+        @AuthenticationPrincipal UserPrincipal userPrincipal
+    ) {
+        return alertService.getAlertById(id, userPrincipal.getId())
+            .map(ResponseEntity::ok)
+            .orElse(ResponseEntity.notFound().build());
+    }
+    
+    @PutMapping("/{id}")
+    public ResponseEntity<?> updateAlert(
+        @PathVariable UUID id,
+        @Valid @RequestBody com.investtracker.alert.dto.UpdatePriceAlertRequest request,
+        @AuthenticationPrincipal UserPrincipal userPrincipal
+    ) {
+        return alertService.updateAlert(id, userPrincipal.getId(), request)
+            .map(ResponseEntity::ok)
+            .orElse(ResponseEntity.notFound().build());
+    }
+    
+    @PostMapping("/bulk")
+    public ResponseEntity<?> createBulkAlerts(
+        @Valid @RequestBody com.investtracker.alert.dto.BulkAlertRequest request,
+        @AuthenticationPrincipal UserPrincipal userPrincipal
+    ) {
+        try {
+            List<PriceAlertResponse> alerts = alertService.createBulkAlerts(
+                userPrincipal.getUser(),
+                request.getAlerts()
+            );
+            return ResponseEntity.status(HttpStatus.CREATED).body(alerts);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
+        }
+    }
+    
+    @GetMapping("/triggered")
+    public ResponseEntity<List<PriceAlertResponse>> getTriggeredAlerts(
+        @AuthenticationPrincipal UserPrincipal userPrincipal
+    ) {
+        List<PriceAlertResponse> alerts = alertService.getTriggeredAlerts(userPrincipal.getId());
+        return ResponseEntity.ok(alerts);
+    }
+    
+    @PostMapping("/{id}/reset")
+    public ResponseEntity<PriceAlertResponse> resetAlert(
+        @PathVariable UUID id,
+        @AuthenticationPrincipal UserPrincipal userPrincipal
+    ) {
+        return alertService.resetAlert(id, userPrincipal.getId())
+            .map(ResponseEntity::ok)
+            .orElse(ResponseEntity.notFound().build());
+    }
+    
     private record ErrorResponse(String message) {}
 }
 

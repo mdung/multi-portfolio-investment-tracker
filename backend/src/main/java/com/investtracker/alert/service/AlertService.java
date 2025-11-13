@@ -76,6 +76,61 @@ public class AlertService {
             });
     }
     
+    public Optional<PriceAlertResponse> getAlertById(UUID alertId, UUID userId) {
+        return alertRepository.findById(alertId)
+            .filter(alert -> alert.getUser().getId().equals(userId))
+            .map(this::toResponse);
+    }
+    
+    @Transactional
+    public Optional<PriceAlertResponse> updateAlert(UUID alertId, UUID userId, com.investtracker.alert.dto.UpdatePriceAlertRequest request) {
+        return alertRepository.findById(alertId)
+            .filter(alert -> alert.getUser().getId().equals(userId))
+            .map(alert -> {
+                Asset asset = assetService.findById(request.getAssetId())
+                    .orElseThrow(() -> new IllegalArgumentException("Asset not found"));
+                
+                alert.setAsset(asset);
+                alert.setConditionType(request.getConditionType());
+                alert.setTargetPrice(request.getTargetPrice());
+                alert.setCurrency(request.getCurrency());
+                // Reset triggered status if updating
+                if (alert.getTriggeredAt() != null) {
+                    alert.setTriggeredAt(null);
+                    alert.setIsActive(true);
+                }
+                
+                return toResponse(alertRepository.save(alert));
+            });
+    }
+    
+    @Transactional
+    public List<PriceAlertResponse> createBulkAlerts(User user, List<PriceAlertRequest> requests) {
+        return requests.stream()
+            .map(request -> createAlert(user, request))
+            .collect(Collectors.toList());
+    }
+    
+    public List<PriceAlertResponse> getTriggeredAlerts(UUID userId) {
+        return alertRepository.findByUserId(userId)
+            .stream()
+            .filter(alert -> alert.getTriggeredAt() != null)
+            .map(this::toResponse)
+            .collect(Collectors.toList());
+    }
+    
+    @Transactional
+    public Optional<PriceAlertResponse> resetAlert(UUID alertId, UUID userId) {
+        return alertRepository.findById(alertId)
+            .filter(alert -> alert.getUser().getId().equals(userId))
+            .filter(alert -> alert.getTriggeredAt() != null)
+            .map(alert -> {
+                alert.setTriggeredAt(null);
+                alert.setIsActive(true);
+                return toResponse(alertRepository.save(alert));
+            });
+    }
+    
     // Check alerts periodically (every 5 minutes)
     @Scheduled(fixedRate = 300000)
     @Transactional
