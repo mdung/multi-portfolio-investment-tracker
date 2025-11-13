@@ -13,6 +13,7 @@ import com.investtracker.transaction.entity.Transaction;
 import com.investtracker.transaction.repository.TransactionRepository;
 import com.investtracker.transaction.service.TransactionService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,7 +32,9 @@ public class AnalyticsService {
     private final TransactionService transactionService;
     private final MarketDataService marketDataService;
     private final PortfolioSnapshotRepository portfolioSnapshotRepository;
+    private final com.investtracker.analytics.service.CorrelationService correlationService;
     
+    @Cacheable(value = "portfolioSummaries", key = "#portfolioId.toString() + '_' + #userId.toString()")
     public PortfolioSummaryResponse getPortfolioSummary(UUID portfolioId, UUID userId) {
         Portfolio portfolio = portfolioService.findById(portfolioId)
             .orElseThrow(() -> new IllegalArgumentException("Portfolio not found"));
@@ -497,6 +500,17 @@ public class AnalyticsService {
             recentTransactions,
             portfolios.size()
         );
+    }
+    
+    public com.investtracker.analytics.dto.CorrelationResponse calculateCorrelation(UUID portfolioId, UUID userId) {
+        Portfolio portfolio = portfolioService.findById(portfolioId)
+            .orElseThrow(() -> new IllegalArgumentException("Portfolio not found"));
+        
+        if (!portfolio.getUser().getId().equals(userId)) {
+            throw new IllegalArgumentException("Portfolio access denied");
+        }
+        
+        return correlationService.calculateCorrelation(portfolioId, userId);
     }
     
     private static class HoldingCalculation {

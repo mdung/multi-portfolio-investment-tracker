@@ -1,6 +1,8 @@
 package com.investtracker.transaction.dto;
 
 import com.investtracker.transaction.entity.Transaction.TransactionType;
+import com.investtracker.transaction.validation.TransactionDateValidation;
+import com.investtracker.transaction.validation.ValidTransactionDate;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import lombok.Data;
@@ -10,7 +12,8 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Data
-public class TransactionRequest {
+@ValidTransactionDate
+public class TransactionRequest implements TransactionDateValidation {
     @NotNull(message = "Portfolio ID is required")
     private UUID portfolioId;
 

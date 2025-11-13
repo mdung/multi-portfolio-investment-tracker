@@ -6,7 +6,10 @@ import com.investtracker.importexport.service.PortfolioExportService;
 import com.investtracker.portfolio.dto.DuplicatePortfolioRequest;
 import com.investtracker.portfolio.dto.PortfolioRequest;
 import com.investtracker.portfolio.dto.PortfolioResponse;
+import com.investtracker.portfolio.dto.RebalanceRequest;
+import com.investtracker.portfolio.dto.RebalanceSuggestion;
 import com.investtracker.portfolio.service.PortfolioService;
+import com.investtracker.portfolio.service.RebalanceService;
 import com.investtracker.security.UserPrincipal;
 import com.investtracker.transaction.dto.TransactionResponse;
 import com.investtracker.transaction.service.TransactionService;
@@ -30,6 +33,7 @@ public class PortfolioController {
     private final AnalyticsService analyticsService;
     private final PortfolioExportService portfolioExportService;
     private final TransactionService transactionService;
+    private final RebalanceService rebalanceService;
     
     @GetMapping
     public ResponseEntity<List<PortfolioResponse>> getUserPortfolios(
@@ -166,6 +170,24 @@ public class PortfolioController {
             return ResponseEntity.ok(transactions);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().build();
+        }
+    }
+    
+    @PostMapping("/{id}/rebalance")
+    public ResponseEntity<?> getRebalanceSuggestions(
+        @PathVariable UUID id,
+        @Valid @RequestBody RebalanceRequest request,
+        @AuthenticationPrincipal UserPrincipal userPrincipal
+    ) {
+        try {
+            List<RebalanceSuggestion> suggestions = rebalanceService.calculateRebalanceSuggestions(
+                id,
+                userPrincipal.getId(),
+                request.getTargetAllocations()
+            );
+            return ResponseEntity.ok(suggestions);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
         }
     }
     

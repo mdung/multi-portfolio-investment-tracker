@@ -107,6 +107,20 @@ public class AnalyticsController {
         return ResponseEntity.ok(dashboard);
     }
     
+    @GetMapping("/correlation")
+    public ResponseEntity<?> getAssetCorrelation(
+        @RequestParam UUID portfolioId,
+        @AuthenticationPrincipal UserPrincipal userPrincipal
+    ) {
+        try {
+            com.investtracker.analytics.dto.CorrelationResponse correlation = 
+                analyticsService.calculateCorrelation(portfolioId, userPrincipal.getId());
+            return ResponseEntity.ok(correlation);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
+        }
+    }
+    
     @GetMapping("/portfolio/{portfolioId}/allocation")
     public ResponseEntity<?> getPortfolioAllocation(
         @PathVariable UUID portfolioId,

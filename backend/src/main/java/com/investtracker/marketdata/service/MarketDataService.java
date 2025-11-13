@@ -5,6 +5,9 @@ import com.investtracker.marketdata.entity.PriceSnapshot;
 import com.investtracker.marketdata.provider.PriceProvider;
 import com.investtracker.marketdata.repository.PriceSnapshotRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -127,10 +130,17 @@ public class MarketDataService {
         return priceSnapshotRepository.findByAssetIdAndDateRange(assetId, startDate, endDate);
     }
     
+    @CacheEvict(value = "assetPrices", allEntries = true)
     public void refreshPortfolioPrices(UUID portfolioId) {
-        // This would need to get all assets in portfolio and refresh their prices
-        // Implementation would be in controller/service that has access to portfolio
+        // Clear cache for portfolio assets
+        // In production, implement proper cache invalidation per portfolio
         clearCache();
+    }
+    
+    @Async
+    public void refreshPricesAsync(UUID portfolioId) {
+        // Async price refresh
+        refreshPortfolioPrices(portfolioId);
     }
     
     private static class CachedPrice {

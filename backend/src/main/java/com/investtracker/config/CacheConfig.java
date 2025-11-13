@@ -1,0 +1,27 @@
+package com.investtracker.config;
+
+import org.springframework.cache.CacheManager;
+import org.springframework.cache.annotation.EnableCaching;
+import org.springframework.cache.concurrent.ConcurrentMapCacheManager;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+@EnableCaching
+public class CacheConfig {
+    
+    @Bean
+    public CacheManager cacheManager() {
+        // Using in-memory cache for now
+        // In production, replace with RedisCacheManager
+        ConcurrentMapCacheManager cacheManager = new ConcurrentMapCacheManager();
+        cacheManager.setCacheNames(java.util.Arrays.asList(
+            "portfolioSummaries",
+            "assetPrices",
+            "portfolioSnapshots",
+            "userPortfolios"
+        ));
+        return cacheManager;
+    }
+}
+
