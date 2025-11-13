@@ -64,12 +64,20 @@ const PortfolioListPage = () => {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold text-gray-900">Portfolios</h1>
-        <button
-          onClick={() => setShowCreateForm(!showCreateForm)}
-          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-        >
-          {showCreateForm ? 'Cancel' : 'Create Portfolio'}
-        </button>
+        <div className="flex space-x-2">
+          <Link
+            to="/portfolios/compare"
+            className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700"
+          >
+            Compare Portfolios
+          </Link>
+          <button
+            onClick={() => setShowCreateForm(!showCreateForm)}
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+          >
+            {showCreateForm ? 'Cancel' : 'Create Portfolio'}
+          </button>
+        </div>
       </div>
 
       {showCreateForm && (

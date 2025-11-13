@@ -11,6 +11,8 @@ import UserProfilePage from './pages/UserProfilePage'
 import TransactionListPage from './pages/TransactionListPage'
 import AssetSearchPage from './pages/AssetSearchPage'
 import AssetManagementPage from './pages/AssetManagementPage'
+import PortfolioComparisonPage from './pages/PortfolioComparisonPage'
+import AnalyticsPage from './pages/AnalyticsPage'
 import Layout from './components/Layout'
 
 function App() {
@@ -96,6 +98,26 @@ function App() {
               <PrivateRoute>
                 <Layout>
                   <AssetManagementPage />
+                </Layout>
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/portfolios/compare"
+            element={
+              <PrivateRoute>
+                <Layout>
+                  <PortfolioComparisonPage />
+                </Layout>
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/analytics/:id"
+            element={
+              <PrivateRoute>
+                <Layout>
+                  <AnalyticsPage />
                 </Layout>
               </PrivateRoute>
             }

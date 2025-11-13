@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import api from '../api/axios'
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts'
+import PortfolioEditModal from '../components/PortfolioEditModal'
+import PortfolioDuplicateModal from '../components/PortfolioDuplicateModal'
 
 const PortfolioDetailPage = () => {
   const { id } = useParams()
@@ -10,6 +12,8 @@ const PortfolioDetailPage = () => {
   const [transactions, setTransactions] = useState([])
   const [loading, setLoading] = useState(true)
   const [showTransactionForm, setShowTransactionForm] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [showDuplicateModal, setShowDuplicateModal] = useState(false)
   const [formData, setFormData] = useState({
     assetId: '',
     assetSymbol: '',
@@ -39,6 +43,24 @@ const PortfolioDetailPage = () => {
       console.error('Failed to fetch data:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleExport = async () => {
+    try {
+      const response = await api.get(`/portfolios/${id}/export?format=csv`, {
+        responseType: 'blob'
+      })
+      const url = window.URL.createObjectURL(new Blob([response.data]))
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', `portfolio_${portfolio.name}_${new Date().toISOString().split('T')[0]}.csv`)
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+    } catch (error) {
+      console.error('Failed to export portfolio:', error)
+      alert('Failed to export portfolio')
     }
   }
 
@@ -109,12 +131,38 @@ const PortfolioDetailPage = () => {
           <h1 className="text-2xl font-bold text-gray-900">{portfolio.name}</h1>
           <p className="text-gray-600">{portfolio.description}</p>
         </div>
-        <Link
-          to="/portfolios"
-          className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
-        >
-          Back to Portfolios
-        </Link>
+        <div className="flex space-x-2">
+          <button
+            onClick={() => setShowEditModal(true)}
+            className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+          >
+            Edit
+          </button>
+          <button
+            onClick={() => setShowDuplicateModal(true)}
+            className="px-4 py-2 text-blue-600 bg-blue-50 rounded-md hover:bg-blue-100"
+          >
+            Duplicate
+          </button>
+          <button
+            onClick={handleExport}
+            className="px-4 py-2 text-green-600 bg-green-50 rounded-md hover:bg-green-100"
+          >
+            Export CSV
+          </button>
+          <Link
+            to={`/analytics/${id}`}
+            className="px-4 py-2 text-purple-600 bg-purple-50 rounded-md hover:bg-purple-100"
+          >
+            Analytics
+          </Link>
+          <Link
+            to="/portfolios"
+            className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+          >
+            Back
+          </Link>
+        </div>
       </div>
 
       {summary && (
@@ -327,6 +375,28 @@ const PortfolioDetailPage = () => {
           <div className="text-center py-8 text-gray-500">No transactions yet</div>
         )}
       </div>
+
+      {showEditModal && (
+        <PortfolioEditModal
+          portfolio={portfolio}
+          onClose={() => setShowEditModal(false)}
+          onSuccess={() => {
+            setShowEditModal(false)
+            fetchData()
+          }}
+        />
+      )}
+
+      {showDuplicateModal && (
+        <PortfolioDuplicateModal
+          portfolio={portfolio}
+          onClose={() => setShowDuplicateModal(false)}
+          onSuccess={(duplicatedPortfolio) => {
+            setShowDuplicateModal(false)
+            window.location.href = `/portfolios/${duplicatedPortfolio.id}`
+          }}
+        />
+      )}
     </div>
   )
 }
