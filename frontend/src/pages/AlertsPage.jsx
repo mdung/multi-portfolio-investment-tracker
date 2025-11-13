@@ -1,11 +1,21 @@
 import { useEffect, useState } from 'react'
 import api from '../api/axios'
+import { useToast } from '../context/ToastContext'
+import AlertEditModal from '../components/AlertEditModal'
+import AlertDetailsModal from '../components/AlertDetailsModal'
 
 const AlertsPage = () => {
+  const { showToast } = useToast()
   const [alerts, setAlerts] = useState([])
+  const [triggeredAlerts, setTriggeredAlerts] = useState([])
   const [loading, setLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState('all') // 'all', 'active', 'triggered'
   const [showCreateForm, setShowCreateForm] = useState(false)
+  const [editingAlert, setEditingAlert] = useState(null)
+  const [viewingAlert, setViewingAlert] = useState(null)
+  const [assets, setAssets] = useState([])
   const [formData, setFormData] = useState({
+    assetId: '',
     assetSymbol: '',
     conditionType: 'BELOW',
     targetPrice: '',
@@ -14,7 +24,16 @@ const AlertsPage = () => {
 
   useEffect(() => {
     fetchAlerts()
+    fetchTriggeredAlerts()
   }, [])
+
+  useEffect(() => {
+    if (formData.assetSymbol && formData.assetSymbol.length >= 2) {
+      searchAssets()
+    } else {
+      setAssets([])
+    }
+  }, [formData.assetSymbol])
 
   const fetchAlerts = async () => {
     try {
@@ -27,26 +46,84 @@ const AlertsPage = () => {
     }
   }
 
-  const handleCreate = async (e) => {
-    e.preventDefault()
+  const fetchTriggeredAlerts = async () => {
     try {
-      // In a real app, you'd search for the asset first
-      // For demo purposes, we'll skip asset lookup
-      alert('Asset lookup required. This is a simplified demo.')
-      // await api.post('/alerts', {
-      //   assetId: assetId,
-      //   conditionType: formData.conditionType,
-      //   targetPrice: parseFloat(formData.targetPrice),
-      //   currency: formData.currency
-      // })
-      // setShowCreateForm(false)
-      // setFormData({ assetSymbol: '', conditionType: 'BELOW', targetPrice: '', currency: 'USD' })
-      // fetchAlerts()
+      const response = await api.get('/alerts/triggered')
+      setTriggeredAlerts(response.data)
     } catch (error) {
-      console.error('Failed to create alert:', error)
-      alert('Failed to create alert')
+      console.error('Failed to fetch triggered alerts:', error)
     }
   }
+
+  const searchAssets = async () => {
+    try {
+      const response = await api.get(`/market-data/search?query=${encodeURIComponent(formData.assetSymbol)}`)
+      setAssets(response.data.slice(0, 5))
+    } catch (error) {
+      console.error('Failed to search assets:', error)
+    }
+  }
+
+  const handleAssetSelect = (asset) => {
+    setFormData({ ...formData, assetId: asset.id, assetSymbol: asset.symbol })
+    setAssets([])
+  }
+
+  const handleCreate = async (e) => {
+    e.preventDefault()
+    if (!formData.assetId) {
+      showToast('Please select an asset', 'error')
+      return
+    }
+    try {
+      await api.post('/alerts', {
+        assetId: formData.assetId,
+        conditionType: formData.conditionType,
+        targetPrice: parseFloat(formData.targetPrice),
+        currency: formData.currency
+      })
+      setShowCreateForm(false)
+      setFormData({ assetId: '', assetSymbol: '', conditionType: 'BELOW', targetPrice: '', currency: 'USD' })
+      fetchAlerts()
+      fetchTriggeredAlerts()
+      showToast('Alert created successfully', 'success')
+    } catch (error) {
+      console.error('Failed to create alert:', error)
+      showToast(error.response?.data?.message || 'Failed to create alert', 'error')
+    }
+  }
+
+  const handleBulkToggle = async (alertIds, isActive) => {
+    try {
+      await Promise.all(
+        alertIds.map((id) => api.put(`/alerts/${id}/toggle?active=${isActive}`))
+      )
+      fetchAlerts()
+      fetchTriggeredAlerts()
+      showToast(`Alerts ${isActive ? 'activated' : 'deactivated'} successfully`, 'success')
+    } catch (error) {
+      console.error('Failed to bulk toggle alerts:', error)
+      showToast('Failed to update alerts', 'error')
+    }
+  }
+
+  const handleReset = async (id) => {
+    try {
+      await api.post(`/alerts/${id}/reset`)
+      fetchAlerts()
+      fetchTriggeredAlerts()
+      showToast('Alert reset successfully', 'success')
+    } catch (error) {
+      console.error('Failed to reset alert:', error)
+      showToast('Failed to reset alert', 'error')
+    }
+  }
+
+  const displayedAlerts = activeTab === 'triggered' 
+    ? triggeredAlerts 
+    : activeTab === 'active'
+    ? alerts.filter((a) => a.isActive)
+    : alerts
 
   const handleDelete = async (id) => {
     if (!window.confirm('Are you sure you want to delete this alert?')) {
@@ -74,32 +151,111 @@ const AlertsPage = () => {
     return <div className="text-center py-8">Loading...</div>
   }
 
+  const [selectedAlerts, setSelectedAlerts] = useState([])
+
+  // Listen for alert triggers (would use WebSocket in production)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchTriggeredAlerts()
+    }, 30000) // Check every 30 seconds
+    return () => clearInterval(interval)
+  }, [])
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold text-gray-900">Price Alerts</h1>
-        <button
-          onClick={() => setShowCreateForm(!showCreateForm)}
-          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-        >
-          {showCreateForm ? 'Cancel' : 'Create Alert'}
-        </button>
+        <div className="flex space-x-2">
+          <button
+            onClick={() => setShowCreateForm(!showCreateForm)}
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+          >
+            {showCreateForm ? 'Cancel' : 'Create Alert'}
+          </button>
+          {selectedAlerts.length > 0 && (
+            <>
+              <button
+                onClick={() => handleBulkToggle(selectedAlerts, true)}
+                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+              >
+                Activate Selected
+              </button>
+              <button
+                onClick={() => handleBulkToggle(selectedAlerts, false)}
+                className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
+              >
+                Deactivate Selected
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      <div className="bg-white shadow rounded-lg">
+        <div className="border-b border-gray-200">
+          <nav className="flex -mb-px">
+            <button
+              onClick={() => setActiveTab('all')}
+              className={`px-4 py-3 text-sm font-medium ${
+                activeTab === 'all'
+                  ? 'border-b-2 border-blue-500 text-blue-600'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              All Alerts ({alerts.length})
+            </button>
+            <button
+              onClick={() => setActiveTab('active')}
+              className={`px-4 py-3 text-sm font-medium ${
+                activeTab === 'active'
+                  ? 'border-b-2 border-blue-500 text-blue-600'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              Active ({alerts.filter((a) => a.isActive).length})
+            </button>
+            <button
+              onClick={() => setActiveTab('triggered')}
+              className={`px-4 py-3 text-sm font-medium ${
+                activeTab === 'triggered'
+                  ? 'border-b-2 border-blue-500 text-blue-600'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              Triggered ({triggeredAlerts.length})
+            </button>
+          </nav>
+        </div>
       </div>
 
       {showCreateForm && (
         <div className="bg-white shadow rounded-lg p-6">
           <h2 className="text-xl font-semibold mb-4">Create Price Alert</h2>
           <form onSubmit={handleCreate} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Asset Symbol *</label>
+            <div className="relative">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Asset *</label>
               <input
                 type="text"
                 required
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 value={formData.assetSymbol}
-                onChange={(e) => setFormData({ ...formData, assetSymbol: e.target.value })}
-                placeholder="e.g., BTC, AAPL"
+                onChange={(e) => setFormData({ ...formData, assetSymbol: e.target.value, assetId: '' })}
+                placeholder="Search asset symbol..."
               />
+              {assets.length > 0 && (
+                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                  {assets.map((asset) => (
+                    <div
+                      key={asset.id}
+                      className="px-3 py-2 hover:bg-gray-100 cursor-pointer"
+                      onClick={() => handleAssetSelect(asset)}
+                    >
+                      <div className="font-medium">{asset.symbol}</div>
+                      <div className="text-sm text-gray-500">{asset.name}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -148,15 +304,33 @@ const AlertsPage = () => {
         </div>
       )}
 
-      {alerts.length === 0 ? (
+      {displayedAlerts.length === 0 ? (
         <div className="bg-white shadow rounded-lg p-8 text-center">
-          <p className="text-gray-500 mb-4">No alerts yet. Create your first price alert.</p>
+          <p className="text-gray-500 mb-4">
+            {activeTab === 'triggered' 
+              ? 'No triggered alerts yet.' 
+              : 'No alerts yet. Create your first price alert.'}
+          </p>
         </div>
       ) : (
         <div className="bg-white shadow rounded-lg overflow-hidden">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
+                <th className="px-6 py-3 text-left">
+                  <input
+                    type="checkbox"
+                    checked={selectedAlerts.length === displayedAlerts.length && displayedAlerts.length > 0}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedAlerts(displayedAlerts.map((a) => a.id))
+                      } else {
+                        setSelectedAlerts([])
+                      }
+                    }}
+                    className="h-4 w-4 text-blue-600"
+                  />
+                </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Asset</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Condition</th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Target Price</th>
@@ -166,9 +340,26 @@ const AlertsPage = () => {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {alerts.map((alert) => (
-                <tr key={alert.id}>
-                  <td className="px-6 py-4 whitespace-nowrap">
+              {displayedAlerts.map((alert) => (
+                <tr key={alert.id} className="hover:bg-gray-50">
+                  <td className="px-6 py-4">
+                    <input
+                      type="checkbox"
+                      checked={selectedAlerts.includes(alert.id)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedAlerts([...selectedAlerts, alert.id])
+                        } else {
+                          setSelectedAlerts(selectedAlerts.filter((id) => id !== alert.id))
+                        }
+                      }}
+                      className="h-4 w-4 text-blue-600"
+                    />
+                  </td>
+                  <td 
+                    className="px-6 py-4 whitespace-nowrap cursor-pointer"
+                    onClick={() => setViewingAlert(alert)}
+                  >
                     <div className="text-sm font-medium text-gray-900">{alert.assetSymbol}</div>
                     <div className="text-sm text-gray-500">{alert.assetName}</div>
                   </td>
@@ -189,24 +380,60 @@ const AlertsPage = () => {
                     {alert.triggeredAt ? new Date(alert.triggeredAt).toLocaleString() : '-'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <button
-                      onClick={() => handleToggle(alert.id, alert.isActive)}
-                      className="text-blue-600 hover:text-blue-900 mr-4"
-                    >
-                      {alert.isActive ? 'Deactivate' : 'Activate'}
-                    </button>
-                    <button
-                      onClick={() => handleDelete(alert.id)}
-                      className="text-red-600 hover:text-red-900"
-                    >
-                      Delete
-                    </button>
+                    <div className="flex justify-end space-x-2">
+                      {alert.triggeredAt && (
+                        <button
+                          onClick={() => handleReset(alert.id)}
+                          className="text-green-600 hover:text-green-900"
+                          title="Reset alert"
+                        >
+                          Reset
+                        </button>
+                      )}
+                      <button
+                        onClick={() => setEditingAlert(alert)}
+                        className="text-blue-600 hover:text-blue-900"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleToggle(alert.id, alert.isActive)}
+                        className="text-purple-600 hover:text-purple-900"
+                      >
+                        {alert.isActive ? 'Deactivate' : 'Activate'}
+                      </button>
+                      <button
+                        onClick={() => handleDelete(alert.id)}
+                        className="text-red-600 hover:text-red-900"
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+      )}
+
+      {editingAlert && (
+        <AlertEditModal
+          alert={editingAlert}
+          onClose={() => setEditingAlert(null)}
+          onSuccess={() => {
+            setEditingAlert(null)
+            fetchAlerts()
+            fetchTriggeredAlerts()
+          }}
+        />
+      )}
+
+      {viewingAlert && (
+        <AlertDetailsModal
+          alert={viewingAlert}
+          onClose={() => setViewingAlert(null)}
+        />
       )}
     </div>
   )

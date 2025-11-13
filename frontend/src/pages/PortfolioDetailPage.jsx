@@ -14,6 +14,10 @@ const PortfolioDetailPage = () => {
   const [showTransactionForm, setShowTransactionForm] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [showDuplicateModal, setShowDuplicateModal] = useState(false)
+  const [assets, setAssets] = useState([])
+  const [suggestedPrice, setSuggestedPrice] = useState(null)
+  const [selectedAssetHistory, setSelectedAssetHistory] = useState(null)
+  const [portfolios, setPortfolios] = useState([])
   const [formData, setFormData] = useState({
     assetId: '',
     assetSymbol: '',
@@ -22,19 +26,36 @@ const PortfolioDetailPage = () => {
     quantity: '',
     price: '',
     fee: '0',
-    transactionDate: new Date().toISOString().slice(0, 16)
+    transactionDate: new Date().toISOString().slice(0, 16),
+    transferPortfolioId: '',
+    notes: ''
   })
 
   useEffect(() => {
     fetchData()
+    fetchPortfolios()
   }, [id])
+
+  useEffect(() => {
+    if (formData.assetSymbol && formData.assetSymbol.length >= 2) {
+      searchAssets()
+    } else {
+      setAssets([])
+    }
+  }, [formData.assetSymbol])
+
+  useEffect(() => {
+    if (formData.transactionType === 'TRANSFER_OUT' || formData.transactionType === 'TRANSFER_IN') {
+      fetchPortfolios()
+    }
+  }, [formData.transactionType])
 
   const fetchData = async () => {
     try {
       const [portfolioRes, summaryRes, transactionsRes] = await Promise.all([
         api.get(`/portfolios/${id}`),
         api.get(`/analytics/portfolio/${id}/summary`),
-        api.get(`/transactions/portfolio/${id}`)
+        api.get(`/portfolios/${id}/transactions`)
       ])
       setPortfolio(portfolioRes.data)
       setSummary(summaryRes.data)
@@ -43,6 +64,59 @@ const PortfolioDetailPage = () => {
       console.error('Failed to fetch data:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchPortfolios = async () => {
+    try {
+      const response = await api.get('/portfolios')
+      setPortfolios(response.data.filter((p) => p.id !== id))
+    } catch (error) {
+      console.error('Failed to fetch portfolios:', error)
+    }
+  }
+
+  const searchAssets = async () => {
+    try {
+      const response = await api.get(`/market-data/search?query=${encodeURIComponent(formData.assetSymbol)}`)
+      setAssets(response.data.slice(0, 5))
+    } catch (error) {
+      console.error('Failed to search assets:', error)
+    }
+  }
+
+  const handleAssetSelect = async (asset) => {
+    setFormData({ ...formData, assetId: asset.id, assetSymbol: asset.symbol })
+    setAssets([])
+    
+    // Fetch current price
+    try {
+      const priceResponse = await api.get(`/market-data/asset/${asset.id}/price`).catch(() => null)
+      if (priceResponse?.data?.price) {
+        setSuggestedPrice(priceResponse.data.price)
+        setFormData((prev) => ({ ...prev, price: priceResponse.data.price.toString() }))
+      }
+    } catch (error) {
+      console.error('Failed to fetch price:', error)
+    }
+
+    // Fetch transaction history for this asset
+    try {
+      const historyResponse = await api.get(`/transactions?assetId=${asset.id}&portfolioId=${id}&size=10`)
+      const history = historyResponse.data.content || historyResponse.data
+      setSelectedAssetHistory(Array.isArray(history) ? history : [])
+    } catch (error) {
+      console.error('Failed to fetch asset history:', error)
+    }
+  }
+
+  const fetchAssetHistory = async (assetId) => {
+    try {
+      const response = await api.get(`/transactions?assetId=${assetId}&portfolioId=${id}&size=20`)
+      const history = response.data.content || response.data
+      setSelectedAssetHistory(Array.isArray(history) ? history : [])
+    } catch (error) {
+      console.error('Failed to fetch asset history:', error)
     }
   }
 
@@ -66,27 +140,28 @@ const PortfolioDetailPage = () => {
 
   const handleCreateTransaction = async (e) => {
     e.preventDefault()
+    if (!formData.assetId) {
+      alert('Please select an asset')
+      return
+    }
+
+    // Validate transfer transactions
+    if ((formData.transactionType === 'TRANSFER_OUT' || formData.transactionType === 'TRANSFER_IN') && !formData.transferPortfolioId) {
+      alert('Please select a destination portfolio for transfer')
+      return
+    }
+
     try {
-      // First, get or create asset
-      const assetResponse = await api.get(`/assets/search?symbol=${formData.assetSymbol}`)
-      let assetId = formData.assetId
-
-      if (!assetId && assetResponse.data.length > 0) {
-        assetId = assetResponse.data[0].id
-      } else {
-        // Create asset (would need asset creation endpoint)
-        alert('Asset creation not implemented in this demo. Please use existing assets.')
-        return
-      }
-
       await api.post('/transactions', {
         portfolioId: id,
-        assetId: assetId,
+        assetId: formData.assetId,
         transactionType: formData.transactionType,
         quantity: parseFloat(formData.quantity),
         price: parseFloat(formData.price),
         fee: parseFloat(formData.fee) || 0,
-        transactionDate: new Date(formData.transactionDate).toISOString()
+        transactionDate: new Date(formData.transactionDate).toISOString(),
+        transferPortfolioId: formData.transferPortfolioId || undefined,
+        notes: formData.notes || undefined
       })
 
       setShowTransactionForm(false)
@@ -98,12 +173,16 @@ const PortfolioDetailPage = () => {
         quantity: '',
         price: '',
         fee: '0',
-        transactionDate: new Date().toISOString().slice(0, 16)
+        transactionDate: new Date().toISOString().slice(0, 16),
+        transferPortfolioId: '',
+        notes: ''
       })
+      setSuggestedPrice(null)
+      setSelectedAssetHistory(null)
       fetchData()
     } catch (error) {
       console.error('Failed to create transaction:', error)
-      alert('Failed to create transaction')
+      alert(error.response?.data?.message || 'Failed to create transaction')
     }
   }
 
@@ -236,49 +315,103 @@ const PortfolioDetailPage = () => {
 
           {showTransactionForm && (
             <form onSubmit={handleCreateTransaction} className="mb-4 space-y-3 p-4 bg-gray-50 rounded">
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-xs font-medium text-gray-700">Asset Symbol</label>
-                  <input
-                    type="text"
-                    required
-                    className="mt-1 block w-full px-2 py-1 text-sm border border-gray-300 rounded"
-                    value={formData.assetSymbol}
-                    onChange={(e) => setFormData({ ...formData, assetSymbol: e.target.value })}
-                  />
+              <div className="relative">
+                <label className="block text-xs font-medium text-gray-700 mb-1">Asset *</label>
+                <input
+                  type="text"
+                  required
+                  className="mt-1 block w-full px-2 py-1 text-sm border border-gray-300 rounded"
+                  value={formData.assetSymbol}
+                  onChange={(e) => setFormData({ ...formData, assetSymbol: e.target.value, assetId: '' })}
+                  placeholder="Search asset symbol..."
+                />
+                {assets.length > 0 && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                    {assets.map((asset) => (
+                      <div
+                        key={asset.id}
+                        className="px-3 py-2 hover:bg-gray-100 cursor-pointer"
+                        onClick={() => handleAssetSelect(asset)}
+                      >
+                        <div className="font-medium text-sm">{asset.symbol}</div>
+                        <div className="text-xs text-gray-500">{asset.name}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {suggestedPrice && (
+                <div className="text-xs text-green-600 bg-green-50 p-2 rounded">
+                  Suggested price: ${parseFloat(suggestedPrice).toFixed(2)}
                 </div>
+              )}
+              {selectedAssetHistory && selectedAssetHistory.length > 0 && (
+                <div className="text-xs bg-blue-50 p-2 rounded">
+                  <div className="font-medium mb-1">Recent transactions for {formData.assetSymbol}:</div>
+                  <div className="space-y-1 max-h-32 overflow-y-auto">
+                    {selectedAssetHistory.slice(0, 5).map((tx) => (
+                      <div key={tx.id} className="text-gray-600">
+                        {new Date(tx.transactionDate).toLocaleDateString()} - {tx.transactionType} {parseFloat(tx.quantity).toFixed(4)} @ ${parseFloat(tx.price).toFixed(2)}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="block text-xs font-medium text-gray-700">Type</label>
                   <select
                     className="mt-1 block w-full px-2 py-1 text-sm border border-gray-300 rounded"
                     value={formData.transactionType}
-                    onChange={(e) => setFormData({ ...formData, transactionType: e.target.value })}
+                    onChange={(e) => setFormData({ ...formData, transactionType: e.target.value, transferPortfolioId: '' })}
                   >
                     <option value="BUY">Buy</option>
                     <option value="SELL">Sell</option>
                     <option value="DEPOSIT">Deposit</option>
                     <option value="WITHDRAW">Withdraw</option>
+                    <option value="TRANSFER_OUT">Transfer Out</option>
+                    <option value="TRANSFER_IN">Transfer In</option>
                   </select>
                 </div>
+                {(formData.transactionType === 'TRANSFER_OUT' || formData.transactionType === 'TRANSFER_IN') && (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700">Destination Portfolio *</label>
+                    <select
+                      required
+                      className="mt-1 block w-full px-2 py-1 text-sm border border-gray-300 rounded"
+                      value={formData.transferPortfolioId}
+                      onChange={(e) => setFormData({ ...formData, transferPortfolioId: e.target.value })}
+                    >
+                      <option value="">Select Portfolio</option>
+                      {portfolios.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </div>
               <div className="grid grid-cols-3 gap-2">
                 <div>
-                  <label className="block text-xs font-medium text-gray-700">Quantity</label>
+                  <label className="block text-xs font-medium text-gray-700">Quantity *</label>
                   <input
                     type="number"
                     step="0.00000001"
                     required
+                    min="0"
                     className="mt-1 block w-full px-2 py-1 text-sm border border-gray-300 rounded"
                     value={formData.quantity}
                     onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-700">Price</label>
+                  <label className="block text-xs font-medium text-gray-700">Price *</label>
                   <input
                     type="number"
                     step="0.01"
                     required
+                    min="0"
                     className="mt-1 block w-full px-2 py-1 text-sm border border-gray-300 rounded"
                     value={formData.price}
                     onChange={(e) => setFormData({ ...formData, price: e.target.value })}
@@ -289,11 +422,32 @@ const PortfolioDetailPage = () => {
                   <input
                     type="number"
                     step="0.01"
+                    min="0"
                     className="mt-1 block w-full px-2 py-1 text-sm border border-gray-300 rounded"
                     value={formData.fee}
                     onChange={(e) => setFormData({ ...formData, fee: e.target.value })}
                   />
                 </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700">Date *</label>
+                <input
+                  type="datetime-local"
+                  required
+                  className="mt-1 block w-full px-2 py-1 text-sm border border-gray-300 rounded"
+                  value={formData.transactionDate}
+                  onChange={(e) => setFormData({ ...formData, transactionDate: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700">Notes</label>
+                <textarea
+                  className="mt-1 block w-full px-2 py-1 text-sm border border-gray-300 rounded"
+                  rows="2"
+                  value={formData.notes}
+                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                  placeholder="Optional notes..."
+                />
               </div>
               <button
                 type="submit"
@@ -318,8 +472,11 @@ const PortfolioDetailPage = () => {
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {summary.holdings.map((holding) => (
-                    <tr key={holding.assetId}>
-                      <td className="px-4 py-2 text-sm">
+                    <tr key={holding.assetId} className="hover:bg-gray-50">
+                      <td 
+                        className="px-4 py-2 text-sm cursor-pointer"
+                        onClick={() => fetchAssetHistory(holding.assetId)}
+                      >
                         <div className="font-medium">{holding.assetSymbol}</div>
                         <div className="text-xs text-gray-500">{holding.assetName}</div>
                       </td>
@@ -357,10 +514,18 @@ const PortfolioDetailPage = () => {
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {transactions.slice(0, 10).map((tx) => (
-                  <tr key={tx.id}>
+                  <tr key={tx.id} className="hover:bg-gray-50">
                     <td className="px-4 py-2 text-sm">{new Date(tx.transactionDate).toLocaleDateString()}</td>
                     <td className="px-4 py-2 text-sm font-medium">{tx.assetSymbol}</td>
-                    <td className="px-4 py-2 text-sm">{tx.transactionType}</td>
+                    <td className="px-4 py-2 text-sm">
+                      <span className={`px-2 py-1 text-xs rounded ${
+                        tx.transactionType === 'BUY' || tx.transactionType === 'DEPOSIT' || tx.transactionType === 'TRANSFER_IN'
+                          ? 'bg-green-100 text-green-800'
+                          : 'bg-red-100 text-red-800'
+                      }`}>
+                        {tx.transactionType}
+                      </span>
+                    </td>
                     <td className="px-4 py-2 text-sm text-right">{parseFloat(tx.quantity).toFixed(4)}</td>
                     <td className="px-4 py-2 text-sm text-right">${parseFloat(tx.price).toFixed(2)}</td>
                     <td className="px-4 py-2 text-sm text-right">
@@ -375,6 +540,46 @@ const PortfolioDetailPage = () => {
           <div className="text-center py-8 text-gray-500">No transactions yet</div>
         )}
       </div>
+
+      {selectedAssetHistory && selectedAssetHistory.length > 0 && (
+        <div className="bg-white shadow rounded-lg p-6">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-semibold">Transaction History: {formData.assetSymbol}</h2>
+            <button
+              onClick={() => setSelectedAssetHistory(null)}
+              className="text-gray-500 hover:text-gray-700"
+            >
+              ✕
+            </button>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Date</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Type</th>
+                  <th className="px-4 py-2 text-right text-xs font-medium text-gray-500">Quantity</th>
+                  <th className="px-4 py-2 text-right text-xs font-medium text-gray-500">Price</th>
+                  <th className="px-4 py-2 text-right text-xs font-medium text-gray-500">Total</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {selectedAssetHistory.map((tx) => (
+                  <tr key={tx.id}>
+                    <td className="px-4 py-2 text-sm">{new Date(tx.transactionDate).toLocaleDateString()}</td>
+                    <td className="px-4 py-2 text-sm">{tx.transactionType}</td>
+                    <td className="px-4 py-2 text-sm text-right">{parseFloat(tx.quantity).toFixed(4)}</td>
+                    <td className="px-4 py-2 text-sm text-right">${parseFloat(tx.price).toFixed(2)}</td>
+                    <td className="px-4 py-2 text-sm text-right">
+                      ${(parseFloat(tx.quantity) * parseFloat(tx.price) + parseFloat(tx.fee || 0)).toFixed(2)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {showEditModal && (
         <PortfolioEditModal
