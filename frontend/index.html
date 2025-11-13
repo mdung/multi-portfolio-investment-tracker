@@ -4,11 +4,61 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Multi-Portfolio Investment Tracker</title>
+    
+    <!-- SEO Meta Tags -->
+    <meta name="description" content="Track and manage your investment portfolios across multiple assets including stocks and cryptocurrencies. Real-time price updates, portfolio analytics, and price alerts." />
+    <meta name="keywords" content="investment tracker, portfolio management, stock tracker, crypto tracker, investment analytics" />
+    <meta name="author" content="Investment Tracker" />
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Multi-Portfolio Investment Tracker" />
+    <meta property="og:description" content="Track and manage your investment portfolios with real-time updates and analytics" />
+    
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Multi-Portfolio Investment Tracker" />
+    <meta name="twitter:description" content="Track and manage your investment portfolios with real-time updates and analytics" />
+    
+    <!-- PWA -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#3b82f6" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Invest Tracker" />
+    
+    <!-- Structured Data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "Multi-Portfolio Investment Tracker",
+      "description": "Track and manage your investment portfolios across multiple assets",
+      "url": "https://investtracker.com",
+      "applicationCategory": "FinanceApplication",
+      "operatingSystem": "Web"
+    }
+    </script>
+    
+    <title>Investment Tracker - Portfolio Management & Analytics</title>
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
+    <script>
+      // Register service worker
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then((registration) => {
+              console.log('SW registered: ', registration)
+            })
+            .catch((registrationError) => {
+              console.log('SW registration failed: ', registrationError)
+            })
+        })
+      }
+    </script>
   </body>
 </html>
 

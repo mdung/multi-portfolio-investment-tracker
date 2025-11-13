@@ -7,6 +7,7 @@ import com.investtracker.alert.repository.PriceAlertRepository;
 import com.investtracker.asset.entity.Asset;
 import com.investtracker.asset.service.AssetService;
 import com.investtracker.marketdata.service.MarketDataService;
+import com.investtracker.notification.EmailService;
 import com.investtracker.user.entity.User;
 import lombok.RequiredArgsConstructor;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -26,6 +27,7 @@ public class AlertService {
     private final PriceAlertRepository alertRepository;
     private final AssetService assetService;
     private final MarketDataService marketDataService;
+    private final EmailService emailService;
     
     public List<PriceAlertResponse> getUserAlerts(UUID userId) {
         return alertRepository.findByUserId(userId)
@@ -160,9 +162,17 @@ public class AlertService {
                     alert.setIsActive(false);
                     alertRepository.save(alert);
                     
-                    // In production, send notification (email, push, etc.)
-                    System.out.println("Alert triggered: " + alert.getAsset().getSymbol() + 
-                        " " + alert.getConditionType() + " " + alert.getTargetPrice());
+                    // Send email notification
+                    try {
+                        emailService.sendPriceAlertEmail(
+                            alert.getUser(),
+                            alert,
+                            currentPrice.get().toString()
+                        );
+                    } catch (Exception e) {
+                        // Log error but don't fail the alert trigger
+                        System.err.println("Failed to send email notification: " + e.getMessage());
+                    }
                 }
             }
         }

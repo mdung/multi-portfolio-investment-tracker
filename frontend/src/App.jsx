@@ -1,35 +1,42 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
+import { lazy, Suspense } from 'react'
 import { AuthProvider } from './context/AuthContext'
 import { ToastProvider } from './context/ToastContext'
 import { ThemeProvider } from './context/ThemeContext'
 import PrivateRoute from './components/PrivateRoute'
-import LoginPage from './pages/LoginPage'
-import RegisterPage from './pages/RegisterPage'
-import DashboardPage from './pages/DashboardPage'
-import PortfolioListPage from './pages/PortfolioListPage'
-import PortfolioDetailPage from './pages/PortfolioDetailPage'
-import AlertsPage from './pages/AlertsPage'
-import UserProfilePage from './pages/UserProfilePage'
-import TransactionListPage from './pages/TransactionListPage'
-import AssetSearchPage from './pages/AssetSearchPage'
-import AssetManagementPage from './pages/AssetManagementPage'
-import PortfolioComparisonPage from './pages/PortfolioComparisonPage'
-import AnalyticsPage from './pages/AnalyticsPage'
-import RebalancingPage from './pages/RebalancingPage'
-import TaxReportPage from './pages/TaxReportPage'
-import PerformanceReportPage from './pages/PerformanceReportPage'
-import CorrelationPage from './pages/CorrelationPage'
-import WatchlistPage from './pages/WatchlistPage'
-import SettingsPage from './pages/SettingsPage'
-import Layout from './components/Layout'
+import ErrorBoundary from './components/ErrorBoundary'
+import LoadingSpinner from './components/LoadingSpinner'
+
+// Lazy load pages for code splitting
+const LoginPage = lazy(() => import('./pages/LoginPage'))
+const RegisterPage = lazy(() => import('./pages/RegisterPage'))
+const DashboardPage = lazy(() => import('./pages/DashboardPage'))
+const PortfolioListPage = lazy(() => import('./pages/PortfolioListPage'))
+const PortfolioDetailPage = lazy(() => import('./pages/PortfolioDetailPage'))
+const AlertsPage = lazy(() => import('./pages/AlertsPage'))
+const UserProfilePage = lazy(() => import('./pages/UserProfilePage'))
+const TransactionListPage = lazy(() => import('./pages/TransactionListPage'))
+const AssetSearchPage = lazy(() => import('./pages/AssetSearchPage'))
+const AssetManagementPage = lazy(() => import('./pages/AssetManagementPage'))
+const PortfolioComparisonPage = lazy(() => import('./pages/PortfolioComparisonPage'))
+const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage'))
+const RebalancingPage = lazy(() => import('./pages/RebalancingPage'))
+const TaxReportPage = lazy(() => import('./pages/TaxReportPage'))
+const PerformanceReportPage = lazy(() => import('./pages/PerformanceReportPage'))
+const CorrelationPage = lazy(() => import('./pages/CorrelationPage'))
+const WatchlistPage = lazy(() => import('./pages/WatchlistPage'))
+const SettingsPage = lazy(() => import('./pages/SettingsPage'))
+const Layout = lazy(() => import('./components/Layout'))
 
 function App() {
   return (
-    <AuthProvider>
-      <ThemeProvider>
-        <ToastProvider>
-          <Router>
-        <Routes>
+    <ErrorBoundary>
+      <AuthProvider>
+        <ThemeProvider>
+          <ToastProvider>
+            <Router>
+              <Suspense fallback={<LoadingSpinner fullScreen={true} />}>
+                <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route
@@ -192,12 +199,14 @@ function App() {
               </PrivateRoute>
             }
           />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </Router>
-      </ToastProvider>
-      </ThemeProvider>
-    </AuthProvider>
+                  <Route path="*" element={<Navigate to="/" replace />} />
+                </Routes>
+              </Suspense>
+            </Router>
+          </ToastProvider>
+        </ThemeProvider>
+      </AuthProvider>
+    </ErrorBoundary>
   )
 }
 
