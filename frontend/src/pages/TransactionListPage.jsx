@@ -3,6 +3,12 @@ import { Link } from 'react-router-dom'
 import api from '../api/axios'
 import TransactionEditModal from '../components/TransactionEditModal'
 import TransactionDeleteModal from '../components/TransactionDeleteModal'
+import ExportModal from '../components/ExportModal'
+import ImportModal from '../components/ImportModal'
+import ConfirmationDialog from '../components/ConfirmationDialog'
+import LoadingSpinner from '../components/LoadingSpinner'
+import EmptyState from '../components/EmptyState'
+import AdvancedFilters from '../components/AdvancedFilters'
 
 const TransactionListPage = () => {
   const [transactions, setTransactions] = useState([])
@@ -21,12 +27,22 @@ const TransactionListPage = () => {
   const [totalPages, setTotalPages] = useState(0)
   const [editingTransaction, setEditingTransaction] = useState(null)
   const [deletingTransaction, setDeletingTransaction] = useState(null)
+  const [showExportModal, setShowExportModal] = useState(false)
+  const [showImportModal, setShowImportModal] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
+  const [sortBy, setSortBy] = useState('date')
+  const [sortOrder, setSortOrder] = useState('desc')
+  const [savedFilters, setSavedFilters] = useState([])
 
   useEffect(() => {
     fetchPortfolios()
     fetchAssets()
     fetchTransactions()
+    // Load saved filters
+    const saved = localStorage.getItem('savedFilters')
+    if (saved) {
+      setSavedFilters(JSON.parse(saved))
+    }
   }, [filters])
 
   const fetchPortfolios = async () => {
@@ -79,71 +95,57 @@ const TransactionListPage = () => {
     setFilters({ ...filters, [key]: value, page: 0 })
   }
 
-  const handleExport = async () => {
-    try {
-      const params = new URLSearchParams()
-      if (filters.portfolioId) params.append('portfolioId', filters.portfolioId)
-      if (filters.assetId) params.append('assetId', filters.assetId)
-      if (filters.transactionType) params.append('transactionType', filters.transactionType)
-
-      const response = await api.get(`/export/transactions?${params.toString()}`, {
-        responseType: 'blob'
-      })
-      const url = window.URL.createObjectURL(new Blob([response.data]))
-      const link = document.createElement('a')
-      link.href = url
-      link.setAttribute('download', `transactions_${new Date().toISOString().split('T')[0]}.csv`)
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-    } catch (error) {
-      console.error('Failed to export transactions:', error)
-      alert('Failed to export transactions')
-    }
+  const handleDelete = (transaction) => {
+    setDeletingTransaction(transaction)
   }
 
-  const handleImport = async (e) => {
-    const file = e.target.files[0]
-    if (!file) return
+  const filteredTransactions = (() => {
+    let filtered = transactions
 
-    const formData = new FormData()
-    formData.append('file', file)
-    if (filters.portfolioId) {
-      formData.append('portfolioId', filters.portfolioId)
-    }
-
-    try {
-      await api.post('/import/transactions', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      })
-      alert('Transactions imported successfully')
-      fetchTransactions()
-    } catch (error) {
-      console.error('Failed to import transactions:', error)
-      alert('Failed to import transactions')
-    }
-    e.target.value = ''
-  }
-
-  const filteredTransactions = searchTerm
-    ? transactions.filter(
+    // Search filter
+    if (searchTerm) {
+      filtered = filtered.filter(
         (tx) =>
           tx.assetSymbol?.toLowerCase().includes(searchTerm.toLowerCase()) ||
           tx.assetName?.toLowerCase().includes(searchTerm.toLowerCase())
       )
-    : transactions
+    }
+
+    // Sort
+    filtered = [...filtered].sort((a, b) => {
+      let comparison = 0
+      switch (sortBy) {
+        case 'date':
+          comparison = new Date(a.transactionDate) - new Date(b.transactionDate)
+          break
+        case 'amount':
+          comparison = (parseFloat(a.quantity) * parseFloat(a.price)) - (parseFloat(b.quantity) * parseFloat(b.price))
+          break
+        case 'asset':
+          comparison = (a.assetSymbol || '').localeCompare(b.assetSymbol || '')
+          break
+        default:
+          comparison = 0
+      }
+      return sortOrder === 'asc' ? comparison : -comparison
+    })
+
+    return filtered
+  })()
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold text-gray-900">Transactions</h1>
         <div className="flex space-x-2">
-          <label className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 cursor-pointer">
-            Import CSV
-            <input type="file" accept=".csv" onChange={handleImport} className="hidden" />
-          </label>
           <button
-            onClick={handleExport}
+            onClick={() => setShowImportModal(true)}
+            className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+          >
+            Import CSV
+          </button>
+          <button
+            onClick={() => setShowExportModal(true)}
             className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
           >
             Export CSV
@@ -219,20 +221,51 @@ const TransactionListPage = () => {
           </div>
         </div>
 
-        <div className="mb-4">
+        <AdvancedFilters
+          filters={filters}
+          onFiltersChange={(newFilters) => setFilters({ ...filters, ...newFilters })}
+          onSaveFilter={(filter) => {
+            const newFilter = { ...filter, id: Date.now().toString() }
+            setSavedFilters([...savedFilters, newFilter])
+            localStorage.setItem('savedFilters', JSON.stringify([...savedFilters, newFilter]))
+          }}
+          savedFilters={savedFilters}
+        />
+
+        <div className="mb-4 flex space-x-2">
           <input
             type="text"
             placeholder="Search by asset symbol or name..."
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
+          <select
+            className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value)}
+          >
+            <option value="date">Sort by Date</option>
+            <option value="amount">Sort by Amount</option>
+            <option value="asset">Sort by Asset</option>
+          </select>
+          <button
+            onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+            className="px-3 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
+            title={sortOrder === 'asc' ? 'Ascending' : 'Descending'}
+          >
+            {sortOrder === 'asc' ? '↑' : '↓'}
+          </button>
         </div>
 
         {loading ? (
-          <div className="text-center py-8">Loading...</div>
+          <LoadingSpinner fullScreen={false} />
         ) : filteredTransactions.length === 0 ? (
-          <div className="text-center py-8 text-gray-500">No transactions found</div>
+          <EmptyState
+            icon="📊"
+            title="No transactions found"
+            message="Try adjusting your filters or create a new transaction"
+          />
         ) : (
           <>
             <div className="overflow-x-auto">
@@ -291,7 +324,7 @@ const TransactionListPage = () => {
                             Edit
                           </button>
                           <button
-                            onClick={() => setDeletingTransaction(tx)}
+                            onClick={() => handleDelete(tx)}
                             className="text-red-600 hover:text-red-800"
                           >
                             Delete
@@ -341,11 +374,44 @@ const TransactionListPage = () => {
       )}
 
       {deletingTransaction && (
-        <TransactionDeleteModal
-          transaction={deletingTransaction}
-          onClose={() => setDeletingTransaction(null)}
+        <>
+          <ConfirmationDialog
+            title="Delete Transaction"
+            message={`Are you sure you want to delete this transaction? This action cannot be undone.`}
+            confirmText="Delete"
+            cancelText="Cancel"
+            type="danger"
+            onConfirm={() => {
+              setDeletingTransaction(null)
+              // TransactionDeleteModal will handle the actual deletion
+            }}
+            onCancel={() => setDeletingTransaction(null)}
+          />
+          <TransactionDeleteModal
+            transaction={deletingTransaction}
+            onClose={() => setDeletingTransaction(null)}
+            onSuccess={() => {
+              setDeletingTransaction(null)
+              fetchTransactions()
+            }}
+          />
+        </>
+      )}
+
+      {showExportModal && (
+        <ExportModal
+          type="transactions"
+          onClose={() => setShowExportModal(false)}
+        />
+      )}
+
+      {showImportModal && (
+        <ImportModal
+          type="transactions"
+          portfolioId={filters.portfolioId}
+          onClose={() => setShowImportModal(false)}
           onSuccess={() => {
-            setDeletingTransaction(null)
+            setShowImportModal(false)
             fetchTransactions()
           }}
         />

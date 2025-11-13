@@ -4,6 +4,8 @@ import api from '../api/axios'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import QuickActionModal from '../components/QuickActionModal'
 import { useToast } from '../context/ToastContext'
+import LoadingSpinner from '../components/LoadingSpinner'
+import EmptyState from '../components/EmptyState'
 
 const DashboardPage = () => {
   const { showToast } = useToast()
@@ -42,7 +44,7 @@ const DashboardPage = () => {
   }
 
   if (loading) {
-    return <div className="text-center py-8">Loading...</div>
+    return <LoadingSpinner fullScreen={true} />
   }
 
   const chartData = dashboard?.recentTransactions
@@ -137,9 +139,13 @@ const DashboardPage = () => {
             </Link>
           </div>
           {portfolios.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              No portfolios yet. Create your first portfolio to get started.
-            </div>
+            <EmptyState
+              icon="💼"
+              title="No portfolios yet"
+              message="Create your first portfolio to start tracking your investments"
+              actionLabel="Create Portfolio"
+              onAction={() => setShowQuickAction('portfolio')}
+            />
           ) : (
             <div className="space-y-3">
               {portfolios.slice(0, 5).map((portfolio) => (

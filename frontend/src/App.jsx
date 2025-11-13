@@ -1,6 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
 import { ToastProvider } from './context/ToastContext'
+import { ThemeProvider } from './context/ThemeContext'
 import PrivateRoute from './components/PrivateRoute'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
@@ -14,13 +15,20 @@ import AssetSearchPage from './pages/AssetSearchPage'
 import AssetManagementPage from './pages/AssetManagementPage'
 import PortfolioComparisonPage from './pages/PortfolioComparisonPage'
 import AnalyticsPage from './pages/AnalyticsPage'
+import RebalancingPage from './pages/RebalancingPage'
+import TaxReportPage from './pages/TaxReportPage'
+import PerformanceReportPage from './pages/PerformanceReportPage'
+import CorrelationPage from './pages/CorrelationPage'
+import WatchlistPage from './pages/WatchlistPage'
+import SettingsPage from './pages/SettingsPage'
 import Layout from './components/Layout'
 
 function App() {
   return (
     <AuthProvider>
-      <ToastProvider>
-        <Router>
+      <ThemeProvider>
+        <ToastProvider>
+          <Router>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
@@ -124,10 +132,71 @@ function App() {
               </PrivateRoute>
             }
           />
+          <Route
+            path="/portfolios/:id/rebalance"
+            element={
+              <PrivateRoute>
+                <Layout>
+                  <RebalancingPage />
+                </Layout>
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/portfolios/:id/tax-report"
+            element={
+              <PrivateRoute>
+                <Layout>
+                  <TaxReportPage />
+                </Layout>
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/portfolios/:id/performance-report"
+            element={
+              <PrivateRoute>
+                <Layout>
+                  <PerformanceReportPage />
+                </Layout>
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/portfolios/:id/correlation"
+            element={
+              <PrivateRoute>
+                <Layout>
+                  <CorrelationPage />
+                </Layout>
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/watchlist"
+            element={
+              <PrivateRoute>
+                <Layout>
+                  <WatchlistPage />
+                </Layout>
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/settings"
+            element={
+              <PrivateRoute>
+                <Layout>
+                  <SettingsPage />
+                </Layout>
+              </PrivateRoute>
+            }
+          />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Router>
       </ToastProvider>
+      </ThemeProvider>
     </AuthProvider>
   )
 }

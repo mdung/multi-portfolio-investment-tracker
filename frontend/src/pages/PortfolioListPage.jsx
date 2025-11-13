@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import api from '../api/axios'
+import ConfirmationDialog from '../components/ConfirmationDialog'
+import LoadingSpinner from '../components/LoadingSpinner'
+import EmptyState from '../components/EmptyState'
 
 const PortfolioListPage = () => {
   const [portfolios, setPortfolios] = useState([])
@@ -43,13 +46,18 @@ const PortfolioListPage = () => {
     }
   }
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this portfolio?')) {
-      return
-    }
+  const [deletingPortfolio, setDeletingPortfolio] = useState(null)
+
+  const handleDelete = (id) => {
+    setDeletingPortfolio(id)
+  }
+
+  const confirmDelete = async () => {
+    if (!deletingPortfolio) return
     try {
-      await api.delete(`/portfolios/${id}`)
+      await api.delete(`/portfolios/${deletingPortfolio}`)
       fetchPortfolios()
+      setDeletingPortfolio(null)
     } catch (error) {
       console.error('Failed to delete portfolio:', error)
       alert('Failed to delete portfolio')
@@ -57,7 +65,7 @@ const PortfolioListPage = () => {
   }
 
   if (loading) {
-    return <div className="text-center py-8">Loading...</div>
+    return <LoadingSpinner fullScreen={false} />
   }
 
   return (
@@ -141,9 +149,13 @@ const PortfolioListPage = () => {
       )}
 
       {portfolios.length === 0 ? (
-        <div className="bg-white shadow rounded-lg p-8 text-center">
-          <p className="text-gray-500 mb-4">No portfolios yet. Create your first portfolio to get started.</p>
-        </div>
+        <EmptyState
+          icon="💼"
+          title="No portfolios yet"
+          message="Create your first portfolio to start tracking your investments"
+          actionLabel="Create Portfolio"
+          onAction={() => setShowCreateForm(true)}
+        />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {portfolios.map((portfolio) => (
@@ -172,6 +184,18 @@ const PortfolioListPage = () => {
             </div>
           ))}
         </div>
+      )}
+
+      {deletingPortfolio && (
+        <ConfirmationDialog
+          title="Delete Portfolio"
+          message="Are you sure you want to delete this portfolio? All transactions and data will be permanently deleted. This action cannot be undone."
+          confirmText="Delete"
+          cancelText="Cancel"
+          type="danger"
+          onConfirm={confirmDelete}
+          onCancel={() => setDeletingPortfolio(null)}
+        />
       )}
     </div>
   )

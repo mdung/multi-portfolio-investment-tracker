@@ -4,6 +4,10 @@ import api from '../api/axios'
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts'
 import PortfolioEditModal from '../components/PortfolioEditModal'
 import PortfolioDuplicateModal from '../components/PortfolioDuplicateModal'
+import ExportModal from '../components/ExportModal'
+import ImportModal from '../components/ImportModal'
+import LoadingSpinner from '../components/LoadingSpinner'
+import EmptyState from '../components/EmptyState'
 
 const PortfolioDetailPage = () => {
   const { id } = useParams()
@@ -18,6 +22,8 @@ const PortfolioDetailPage = () => {
   const [suggestedPrice, setSuggestedPrice] = useState(null)
   const [selectedAssetHistory, setSelectedAssetHistory] = useState(null)
   const [portfolios, setPortfolios] = useState([])
+  const [showExportModal, setShowExportModal] = useState(false)
+  const [showImportModal, setShowImportModal] = useState(false)
   const [formData, setFormData] = useState({
     assetId: '',
     assetSymbol: '',
@@ -120,22 +126,8 @@ const PortfolioDetailPage = () => {
     }
   }
 
-  const handleExport = async () => {
-    try {
-      const response = await api.get(`/portfolios/${id}/export?format=csv`, {
-        responseType: 'blob'
-      })
-      const url = window.URL.createObjectURL(new Blob([response.data]))
-      const link = document.createElement('a')
-      link.href = url
-      link.setAttribute('download', `portfolio_${portfolio.name}_${new Date().toISOString().split('T')[0]}.csv`)
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-    } catch (error) {
-      console.error('Failed to export portfolio:', error)
-      alert('Failed to export portfolio')
-    }
+  const handleExport = () => {
+    setShowExportModal(true)
   }
 
   const handleCreateTransaction = async (e) => {
@@ -187,7 +179,7 @@ const PortfolioDetailPage = () => {
   }
 
   if (loading) {
-    return <div className="text-center py-8">Loading...</div>
+    return <LoadingSpinner fullScreen={true} />
   }
 
   if (!portfolio) {
@@ -227,13 +219,43 @@ const PortfolioDetailPage = () => {
             onClick={handleExport}
             className="px-4 py-2 text-green-600 bg-green-50 rounded-md hover:bg-green-100"
           >
-            Export CSV
+            Export
+          </button>
+          <button
+            onClick={() => setShowImportModal(true)}
+            className="px-4 py-2 text-blue-600 bg-blue-50 rounded-md hover:bg-blue-100"
+          >
+            Import
           </button>
           <Link
             to={`/analytics/${id}`}
             className="px-4 py-2 text-purple-600 bg-purple-50 rounded-md hover:bg-purple-100"
           >
             Analytics
+          </Link>
+          <Link
+            to={`/portfolios/${id}/rebalance`}
+            className="px-4 py-2 text-indigo-600 bg-indigo-50 rounded-md hover:bg-indigo-100"
+          >
+            Rebalance
+          </Link>
+          <Link
+            to={`/portfolios/${id}/tax-report`}
+            className="px-4 py-2 text-orange-600 bg-orange-50 rounded-md hover:bg-orange-100"
+          >
+            Tax Report
+          </Link>
+          <Link
+            to={`/portfolios/${id}/performance-report`}
+            className="px-4 py-2 text-pink-600 bg-pink-50 rounded-md hover:bg-pink-100"
+          >
+            Performance
+          </Link>
+          <Link
+            to={`/portfolios/${id}/correlation`}
+            className="px-4 py-2 text-cyan-600 bg-cyan-50 rounded-md hover:bg-cyan-100"
+          >
+            Correlation
           </Link>
           <Link
             to="/portfolios"
@@ -492,7 +514,13 @@ const PortfolioDetailPage = () => {
               </table>
             </div>
           ) : (
-            <div className="text-center py-8 text-gray-500">No holdings yet</div>
+            <EmptyState
+              icon="📊"
+              title="No holdings yet"
+              message="Add your first transaction to start tracking holdings"
+              actionLabel="Add Transaction"
+              onAction={() => setShowTransactionForm(true)}
+            />
           )}
         </div>
       </div>
@@ -537,7 +565,13 @@ const PortfolioDetailPage = () => {
             </table>
           </div>
         ) : (
-          <div className="text-center py-8 text-gray-500">No transactions yet</div>
+          <EmptyState
+            icon="💼"
+            title="No transactions yet"
+            message="Start tracking your investments by adding your first transaction"
+            actionLabel="Add Transaction"
+            onAction={() => setShowTransactionForm(true)}
+          />
         )}
       </div>
 
@@ -599,6 +633,27 @@ const PortfolioDetailPage = () => {
           onSuccess={(duplicatedPortfolio) => {
             setShowDuplicateModal(false)
             window.location.href = `/portfolios/${duplicatedPortfolio.id}`
+          }}
+        />
+      )}
+
+      {showExportModal && (
+        <ExportModal
+          type="portfolio"
+          id={id}
+          name={portfolio?.name}
+          onClose={() => setShowExportModal(false)}
+        />
+      )}
+
+      {showImportModal && (
+        <ImportModal
+          type="portfolio"
+          portfolioId={id}
+          onClose={() => setShowImportModal(false)}
+          onSuccess={() => {
+            setShowImportModal(false)
+            fetchData()
           }}
         />
       )}

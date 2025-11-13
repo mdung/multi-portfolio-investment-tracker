@@ -3,6 +3,9 @@ import api from '../api/axios'
 import { useToast } from '../context/ToastContext'
 import AlertEditModal from '../components/AlertEditModal'
 import AlertDetailsModal from '../components/AlertDetailsModal'
+import LoadingSpinner from '../components/LoadingSpinner'
+import EmptyState from '../components/EmptyState'
+import ConfirmationDialog from '../components/ConfirmationDialog'
 
 const AlertsPage = () => {
   const { showToast } = useToast()
@@ -125,16 +128,24 @@ const AlertsPage = () => {
     ? alerts.filter((a) => a.isActive)
     : alerts
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this alert?')) {
-      return
-    }
+  const [selectedAlerts, setSelectedAlerts] = useState([])
+  const [deletingAlert, setDeletingAlert] = useState(null)
+
+  const handleDelete = (id) => {
+    setDeletingAlert(id)
+  }
+
+  const confirmDelete = async () => {
+    if (!deletingAlert) return
     try {
-      await api.delete(`/alerts/${id}`)
+      await api.delete(`/alerts/${deletingAlert}`)
       fetchAlerts()
+      fetchTriggeredAlerts()
+      setDeletingAlert(null)
+      showToast('Alert deleted successfully', 'success')
     } catch (error) {
       console.error('Failed to delete alert:', error)
-      alert('Failed to delete alert')
+      showToast('Failed to delete alert', 'error')
     }
   }
 
@@ -148,10 +159,8 @@ const AlertsPage = () => {
   }
 
   if (loading) {
-    return <div className="text-center py-8">Loading...</div>
+    return <LoadingSpinner fullScreen={false} />
   }
-
-  const [selectedAlerts, setSelectedAlerts] = useState([])
 
   // Listen for alert triggers (would use WebSocket in production)
   useEffect(() => {
@@ -305,13 +314,15 @@ const AlertsPage = () => {
       )}
 
       {displayedAlerts.length === 0 ? (
-        <div className="bg-white shadow rounded-lg p-8 text-center">
-          <p className="text-gray-500 mb-4">
-            {activeTab === 'triggered' 
-              ? 'No triggered alerts yet.' 
-              : 'No alerts yet. Create your first price alert.'}
-          </p>
-        </div>
+        <EmptyState
+          icon={activeTab === 'triggered' ? '🔔' : '📊'}
+          title={activeTab === 'triggered' ? 'No triggered alerts' : 'No alerts yet'}
+          message={activeTab === 'triggered' 
+            ? 'You don\'t have any triggered alerts at the moment'
+            : 'Create your first price alert to get notified when assets reach target prices'}
+          actionLabel={activeTab === 'triggered' ? null : 'Create Alert'}
+          onAction={activeTab === 'triggered' ? null : () => setShowCreateForm(true)}
+        />
       ) : (
         <div className="bg-white shadow rounded-lg overflow-hidden">
           <table className="min-w-full divide-y divide-gray-200">
@@ -433,6 +444,18 @@ const AlertsPage = () => {
         <AlertDetailsModal
           alert={viewingAlert}
           onClose={() => setViewingAlert(null)}
+        />
+      )}
+
+      {deletingAlert && (
+        <ConfirmationDialog
+          title="Delete Alert"
+          message="Are you sure you want to delete this price alert? This action cannot be undone."
+          confirmText="Delete"
+          cancelText="Cancel"
+          type="danger"
+          onConfirm={confirmDelete}
+          onCancel={() => setDeletingAlert(null)}
         />
       )}
     </div>
