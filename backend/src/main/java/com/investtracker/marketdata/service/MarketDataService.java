@@ -117,6 +117,22 @@ public class MarketDataService {
         priceCache.clear();
     }
     
+    public Map<UUID, BigDecimal> getBulkPrices(List<UUID> assetIds, String currency) {
+        // This would need AssetService to get assets by IDs
+        // For now, return empty map - will be implemented in controller
+        return new HashMap<>();
+    }
+    
+    public List<PriceSnapshot> getHistoricalPrices(UUID assetId, LocalDateTime startDate, LocalDateTime endDate) {
+        return priceSnapshotRepository.findByAssetIdAndDateRange(assetId, startDate, endDate);
+    }
+    
+    public void refreshPortfolioPrices(UUID portfolioId) {
+        // This would need to get all assets in portfolio and refresh their prices
+        // Implementation would be in controller/service that has access to portfolio
+        clearCache();
+    }
+    
     private static class CachedPrice {
         final BigDecimal price;
         final long timestamp;
